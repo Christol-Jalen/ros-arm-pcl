@@ -117,21 +117,21 @@ public:
   ros::ServiceServer t1_service_;
   ros::ServiceServer t2_service_;
   ros::ServiceServer t3_service_;
-  ros::Subscriber pointCloud_sub_;
+  ros::Subscriber sub_pointCloud;
 
   pcl::shared_ptr<pcl::PointCloud<pcl::PointXYZRGB>> pcl_cloud_;
 
-  pcl::PointCloud<pcl::PointXYZ>::Ptr g_octomap_ptr;////
-  pcl::PassThrough<pcl::PointXYZ> g_octomap_pt;////
-  pcl::PointCloud<pcl::PointXYZ>::Ptr g_octomap_filtered;////
-  sensor_msgs::PointCloud2 g_octomap_filtered_msg;////
-  ros::Publisher g_pub_octomap;////
-  ros::Subscriber octomap_pointCloud_sub_; ////
-  pcl::PointCloud<pcl::PointXYZRGB>::Ptr g_cloud_filtered_octomap; ////
-  ros::Publisher g_pub_cloud_octomap; ////
-  pcl::PassThrough<pcl::PointXYZRGB> g_pt; ////
-  sensor_msgs::PointCloud2 g_cloud_filtered_msg; ////
-  pcl::PCLPointCloud2 g_octomap_pc;////
+  pcl::PointCloud<pcl::PointXYZ>::Ptr octomap_;
+  pcl::PassThrough<pcl::PointXYZ> octomap_pointCloud_;
+  pcl::PointCloud<pcl::PointXYZ>::Ptr octomap_filtered_;
+  sensor_msgs::PointCloud2 octomap_filtered_msg_;
+  ros::Publisher pub_octomap_filtered;
+  ros::Subscriber sub_octomap; 
+  pcl::PointCloud<pcl::PointXYZRGB>::Ptr pcl_cloud_filtered_octo_;
+  ros::Publisher pub_octomap; 
+  pcl::PassThrough<pcl::PointXYZRGB> g_pt_; 
+  sensor_msgs::PointCloud2 pcl_cloud_filtered_octo_msg_; 
+  pcl::PCLPointCloud2 cloud_octomap_;
 
 
   pcl::PointCloud<pcl::PointXYZRGB>::Ptr pcl_crop_filtered_;
@@ -156,7 +156,7 @@ public:
   double gripper_offset_ = 0.145;
   double approach_distance_ = 0.2;
 
-  bool task_3_filter = false;////
+  bool activate_octomap_ = false;
 
   std::mutex cloud_mutex_;
 

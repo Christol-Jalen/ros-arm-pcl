@@ -12,8 +12,8 @@ cw3::cw3(ros::NodeHandle nh)
   /* class constructor */
 
   nh_ = nh;
-  pointCloud_sub_ = nh_.subscribe("/r200/camera/depth_registered/points", 1, &cw3::point_cloud_callback, this);
-  octomap_pointCloud_sub_ = nh_.subscribe("/octomap_point_cloud_centers", 1, &cw3::octomap_callback, this);
+  sub_pointCloud = nh_.subscribe("/r200/camera/depth_registered/points", 1, &cw3::point_cloud_callback, this);
+  sub_octomap = nh_.subscribe("/octomap_point_cloud_centers", 1, &cw3::octomap_callback, this);
   
 
   // advertise solutions for coursework tasks
@@ -28,12 +28,12 @@ cw3::cw3(ros::NodeHandle nh)
   pcl_cloud_ = boost::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>();
   pcl_crop_filtered_.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
   pcl_pass_filtered_.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-  g_cloud_filtered_octomap.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
-  g_octomap_ptr.reset(new pcl::PointCloud<pcl::PointXYZ>);
-  g_octomap_filtered.reset(new pcl::PointCloud<pcl::PointXYZ>); // filtered octomap point cloud
+  pcl_cloud_filtered_octo_.reset(new pcl::PointCloud<pcl::PointXYZRGB>);
+  octomap_.reset(new pcl::PointCloud<pcl::PointXYZ>);
+  octomap_filtered_.reset(new pcl::PointCloud<pcl::PointXYZ>); 
 
-  g_pub_cloud_octomap = nh.advertise<sensor_msgs::PointCloud2> ("octomap_cloud", 1, true);
-  g_pub_octomap = nh.advertise<sensor_msgs::PointCloud2> ("filtered_octomap_cloud", 1, true);
+  pub_octomap = nh.advertise<sensor_msgs::PointCloud2> ("octomap_cloud", 1, true);
+  pub_octomap_filtered = nh.advertise<sensor_msgs::PointCloud2> ("filtered_octomap_cloud", 1, true);
 
   ROS_INFO("cw3 class initialised");
 }
@@ -88,11 +88,11 @@ cw3::point_cloud_callback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
   std::lock_guard<std::mutex> guard(cloud_mutex_);
   pcl::fromROSMsg(*cloud_msg, *pcl_cloud_);
 
-  if (task_3_filter)
+  if (activate_octomap_)
   {
-    applyFilterTask3(pcl_cloud_, g_cloud_filtered_octomap);
-    pcl::toROSMsg(*g_cloud_filtered_octomap, g_cloud_filtered_msg);
-    g_pub_cloud_octomap.publish (g_cloud_filtered_msg);
+    pcl_cloud_ = pcl_cloud_filtered_octo_;
+    pcl::toROSMsg(*pcl_cloud_filtered_octo_, pcl_cloud_filtered_octo_msg_);
+    pub_octomap.publish (pcl_cloud_filtered_octo_msg_);
   }
 
 }
@@ -103,19 +103,18 @@ void
 cw3::octomap_callback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 {
   //std::lock_guard<std::mutex> guard(cloud_mutex_);
-  pcl_conversions::toPCL(*cloud_msg, g_octomap_pc);
-  pcl::fromPCLPointCloud2(g_octomap_pc, *g_octomap_ptr);
+  pcl::fromROSMsg(*cloud_msg, *octomap_);
 
   // Create the filtering object
-  g_octomap_pt.setInputCloud(g_octomap_ptr);
-  g_octomap_pt.setFilterFieldName("z");
-  g_octomap_pt.setFilterLimits(0.03, 0.5);
-  g_octomap_pt.filter(*g_octomap_filtered);
+  octomap_pointCloud_.setInputCloud(octomap_);
+  octomap_pointCloud_.setFilterFieldName("z");
+  octomap_pointCloud_.setFilterLimits(0.03, 1);
+  octomap_pointCloud_.filter(*octomap_filtered_);
 
   // Convert PCL point cloud to ROS message
-  pcl::toROSMsg(*g_octomap_filtered, g_octomap_filtered_msg);
-  g_octomap_filtered_msg.header = cloud_msg->header;  // Copy the header to maintain the timestamp and frame_id
-  g_pub_octomap.publish(g_octomap_filtered_msg);
+  pcl::toROSMsg(*octomap_filtered_, octomap_filtered_msg_);
+  octomap_filtered_msg_.header = cloud_msg->header;  // Copy the header to maintain the timestamp and frame_id
+  pub_octomap_filtered.publish(octomap_filtered_msg_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,7 +127,7 @@ cw3::solve_task3()
   pcl::PointCloud<pcl::PointXYZ>::Ptr current_octomap(new pcl::PointCloud<pcl::PointXYZ>);
   
   // Get the current camera points cloud
-  *current_octomap = *g_octomap_filtered;
+  *current_octomap = *octomap_filtered_;
 
   // Print out the number of points in current_octomap
   ROS_INFO("Number of points in current_octomap: %lu", current_octomap->size());
@@ -149,29 +148,6 @@ cw3::solve_task3()
     ROS_INFO("This is centroid: (%f, %f, %f)", point.x, point.y, point.z);
   }
 
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void
-cw3::applyFilterTask3(pcl::PointCloud<pcl::PointXYZRGB>::Ptr &in_cloud_ptr,
-                      pcl::PointCloud<pcl::PointXYZRGB>::Ptr &out_cloud_ptr)
-{
-  /* Function applying the pass through filter */
-
-  g_pt.setInputCloud(in_cloud_ptr);
-  
-  // Enlarging the x limits to include the whole plane
-  g_pt.setFilterFieldName ("x");
-  g_pt.setFilterLimits(-1.0, 1.0);
-
-  // Restricting the z limits to the top of the cubes
-  g_pt.setFilterFieldName("z");
-  g_pt.setFilterLimits (0, 0.5);
-  
-  g_pt.filter (*out_cloud_ptr);
-  
-  return;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -557,7 +533,7 @@ cw3::scanEnvironment()
 
     // Enable filter when arm is in position
     if (i == 0)
-      task_3_filter = true;
+      activate_octomap_ = true;
 
     // Initialise variable to store distance between points
     distance.x = corners.at(i).x - corners.at(i+1).x;
@@ -584,7 +560,7 @@ cw3::scanEnvironment()
   ros::Duration(1.0).sleep();
 
   // Disable filter when scan is complete
-  task_3_filter = false;
+  activate_octomap_ = false;
   // Reset the arm velocity
   arm_group_.setMaxVelocityScalingFactor(0.1);
 
@@ -636,7 +612,7 @@ cw3::clustering(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_input)
         Eigen::Vector4f centroid;
         pcl::compute3DCentroid(*cluster_cloud, centroid);
 
-        if (std::abs(centroid[0])>0.1 || std::abs(centroid[0])>0.1) // get rid of the cluster at the robot base
+        if (std::abs(centroid[0]) > 0.1 || std::abs(centroid[1]) > 0.1) // get rid of the cluster at the robot base
         {
           // Add the centroid to the centroids vector
           pcl::PointXYZ simple_centroid(centroid[0], centroid[1], centroid[2]);
