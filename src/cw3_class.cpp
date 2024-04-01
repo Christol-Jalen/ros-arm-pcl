@@ -133,19 +133,30 @@ cw3::solve_task3()
   ROS_INFO("Number of points in current_octomap: %lu", current_octomap->size());
 
   std::vector<pcl::PointXYZ> centroids_vector = clustering(current_octomap);
-  ROS_INFO("==============================");
-  ROS_INFO("The centroids are:");
-  ROS_INFO("==============================");
-  for(const auto& point : centroids_vector) 
-  { 
-    ROS_INFO("Centroid: (%f, %f, %f)", point.x, point.y, point.z);
-  }
 
-  for(const auto& point : centroids_vector) 
+  // ROS_INFO("==============================");
+  // ROS_INFO("The centroids are:");
+  // ROS_INFO("==============================");
+  // for(const auto& point : centroids_vector) 
+  // { 
+  //   ROS_INFO("Centroid: (%f, %f, %f)", point.x, point.y, point.z);
+  // }
+
+  ROS_INFO("=================================================");
+  for(const auto& point_pcl : centroids_vector) 
   { 
-    geometry_msgs::Pose pose = setPose(point.x - camera_offset_, point.y, point.z+0.5);
-    moveArm(pose);
-    ROS_INFO("This is centroid: (%f, %f, %f)", point.x, point.y, point.z);
+    
+    ROS_INFO("This is centroid: (%f, %f, %f)", point_pcl.x, point_pcl.y, point_pcl.z);
+    geometry_msgs::Point point_geo;
+    point_geo.x = point_pcl.x;
+    point_geo.y = point_pcl.y;
+    point_geo.z = point_pcl.z;
+    std::string shape = task2_checkShape(point_geo);
+
+    ROS_INFO("Shape: %s", shape.c_str());
+    ROS_INFO("=================================================");
+
+    
   }
 
 }
