@@ -115,6 +115,9 @@ public:
   geometry_msgs::Point 
   findMostCommonPoint(const std::map<std::tuple<float, float, float>, std::string>& point_shape_map);
 
+  double
+  getClusterWidth(pcl::PointCloud<pcl::PointXYZ>::Ptr cluster);
+
   /* ----- class member variables ----- */
 
   ros::NodeHandle nh_;
@@ -151,8 +154,8 @@ public:
   moveit::planning_interface::MoveGroupInterface hand_group_{"hand"};
 
   double obj_width_ = 0.04;
+  double obj_height_ = 0.04;
   double pi_ = 3.14159;
-  double z_offset_ = 0.125;
   double angle_offset_ = 3.14159 / 4.0;
 
   double camera_offset_ = 0.04;

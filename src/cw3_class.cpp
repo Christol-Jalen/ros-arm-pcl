@@ -170,11 +170,15 @@ for(const auto& point_pcl : centroids_vector)
  }
   geometry_msgs::Point most_common_point = findMostCommonPoint(point_shape_map);
   
-  std::tuple<float, float, float> most_common_tuple = std::make_tuple(most_common_point.x, most_common_point.y, most_common_point.z);
+  std::tuple<float, float, float> most_common_tuple = std::make_tuple(most_common_point.x, most_common_point.y, most_common_point.z); // task3 0ffset
 
   std::string most_common_shape = point_shape_map[most_common_tuple];
 
-  solve_task1(most_common_point, basket_point_, most_common_shape, 0.04);
+  geometry_msgs::Point most_common_point_grasp;
+  most_common_point_grasp = most_common_point;
+  most_common_point_grasp.z = most_common_point.z - obj_height_; // apppy offset in z
+
+  solve_task1(most_common_point_grasp, basket_point_, most_common_shape, 0.04);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
