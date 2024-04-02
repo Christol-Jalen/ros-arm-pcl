@@ -47,7 +47,7 @@ cw3::t1_callback(cw3_world_spawner::Task1Service::Request &request,
   /* function which should solve task 1 */
   ROS_INFO("The coursework solving callback for task 1 has been triggered");
   bool success = solve_task1(request.object_point.point, 
-    request.goal_point.point, request.shape_type);
+    request.goal_point.point, request.shape_type, obj_width_);
   return success;
 }
 
@@ -142,40 +142,103 @@ cw3::solve_task3()
   //   ROS_INFO("Centroid: (%f, %f, %f)", point.x, point.y, point.z);
   // }
 
-  ROS_INFO("=================================================");
-  for(const auto& point_pcl : centroids_vector) 
-  { 
-    
+// Create a map, whose keys are the centroids, and the values are the shapes
+// std::map<geometry_msgs::Point, std::string> point_shape_map;
+std::map<std::tuple<float, float, float>, std::string> point_shape_map;
+
+ROS_INFO("=================================================");
+for(const auto& point_pcl : centroids_vector) 
+ { 
     ROS_INFO("This is centroid: (%f, %f, %f)", point_pcl.x, point_pcl.y, point_pcl.z);
     geometry_msgs::Point point_geo;
     point_geo.x = point_pcl.x;
     point_geo.y = point_pcl.y;
     point_geo.z = point_pcl.z;
     std::string shape = task2_checkShape(point_geo);
+    std::tuple<float, float, float> point_tuple = std::make_tuple(point_pcl.x, point_pcl.y, point_pcl.z);
+    if (shape != "obstacle")
+    {
+      // add the point and shape info to the map if not obstacles
+      point_shape_map[point_tuple] = shape;
+      ROS_INFO("Shape: %s", shape.c_str());
+    }
+    else
+    {
+      ROS_INFO("Obstacle detected, shape not added to map.");
+    }
+    ROS_INFO("=================================================");  
+ }
+  geometry_msgs::Point most_common_point = findMostCommonPoint(point_shape_map);
+  
+  std::tuple<float, float, float> most_common_tuple = std::make_tuple(most_common_point.x, most_common_point.y, most_common_point.z);
 
-    ROS_INFO("Shape: %s", shape.c_str());
-    ROS_INFO("=================================================");
+  std::string most_common_shape = point_shape_map[most_common_tuple];
 
-    
-  }
+  solve_task1(most_common_point, basket_point_, most_common_shape, 0.04);
+}
 
+///////////////////////////////////////////////////////////////////////////////
+
+
+geometry_msgs::Point 
+cw3::findMostCommonPoint(const std::map<std::tuple<float, float, float>, std::string>& point_shape_map) 
+{
+    // Map to store the count of each shape
+    std::map<std::string, int> shape_count;
+
+    // Iterate over the map and count occurrences of each shape
+    for(const auto& pair : point_shape_map) {
+        const std::string& shape = pair.second;
+        shape_count[shape]++;
+    }
+
+    // Find the most common shape
+    std::string most_common_shape;
+    int max_count = 0;
+
+    for(const auto& pair : shape_count) {
+        if(pair.second > max_count) {
+            max_count = pair.second;
+            most_common_shape = pair.first;
+        }
+    }
+
+    // Find the key corresponding to the most common shape
+    std::tuple<float, float, float> most_common_tuple;
+    geometry_msgs::Point most_common_point;
+
+    for(const auto& pair : point_shape_map) {
+        if(pair.second == most_common_shape) {
+            most_common_tuple = pair.first;
+            // convert tuple to point
+            most_common_point.x = std::get<0>(most_common_tuple);
+            most_common_point.y = std::get<1>(most_common_tuple);
+            most_common_point.z = std::get<2>(most_common_tuple);
+            break; // Assuming you want to stop at the first occurrence
+        }
+    }
+
+    return most_common_point;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 
 bool
 cw3::solve_task1(geometry_msgs::Point object_point,
-  geometry_msgs::Point target_point, std::string shape_type)
+  geometry_msgs::Point target_point, std::string shape_type, double obj_width)
 {
   ROS_INFO("object_point: [%f, %f, %f]\n", object_point.x, object_point.y, object_point.z);
   
-  geometry_msgs::Pose object_pose = setPose(object_point.x - camera_offset_, object_point.y, 0.5);
+  geometry_msgs::Pose object_pose = setPose(object_point.x - camera_offset_, object_point.y, 0.6);
 
   bool success = moveArm(object_pose);
 
+  // Pause for get image
+  // ros::Duration(1.0).sleep();  
+
   // determine the orientation of the object
   double obj_theta = task1_getOrient(shape_type);
-  ROS_INFO("### The object orient as (%f) degree", obj_theta);
+  ROS_INFO("### The object orient as (%f) degree", obj_theta* (180/pi_));
 
   // determine the grasp position and place position
   geometry_msgs::Point pick_obj_point = object_point;
@@ -183,15 +246,18 @@ cw3::solve_task1(geometry_msgs::Point object_point,
 
   // add offset according the orientation
   if (shape_type == "nought") {
-    pick_obj_point.x += 2 * obj_width_ * sin(obj_theta);
-    pick_obj_point.y += 2 * obj_width_ * cos(obj_theta);
-    plac_tar_point.y += 2 * obj_width_;
+    pick_obj_point.x += 2 * obj_width * sin(obj_theta);
+    pick_obj_point.y += 2 * obj_width * cos(obj_theta);
+
+    plac_tar_point.y += 2 * obj_width;
     ROS_INFO("Get nought object");
   } 
-  else if (shape_type == "nought") {
-    pick_obj_point.x += obj_width_ * cos(obj_theta);
-    pick_obj_point.y += obj_width_ * sin(obj_theta);
-    plac_tar_point.x += obj_width_;
+  else if (shape_type == "cross") {
+    pick_obj_point.x += 1.5 * obj_width * cos(obj_theta);
+    pick_obj_point.y -= 1.5 * obj_width * sin(obj_theta);
+
+    plac_tar_point.x += 1.5 * obj_width;
+    //obj_theta = -obj_theta;
     ROS_INFO("Get cross object");
   } 
   else {
@@ -200,7 +266,7 @@ cw3::solve_task1(geometry_msgs::Point object_point,
 
   ROS_INFO("### object_point: [%f, %f, %f]\n", pick_obj_point.x, pick_obj_point.y, pick_obj_point.z);
   // arm pick obj then place to tag
-  success = success * pickAndPlace(pick_obj_point, plac_tar_point);
+  success = success * pickAndPlace(pick_obj_point, plac_tar_point, obj_theta);
   return true;
 }
 
@@ -214,12 +280,15 @@ cw3::task1_getOrient(std::string shape_type)
   
   // Get the current camera points cloud
   *current_points = *pcl_cloud_;
+  //pcl::PointXYZRGB center_point_0 = pcl_cloud_->points[230720];
+  //float center_depth_0 = center_point_0.z;
+  //ROS_INFO("[test] The center depth is (%f) ", center_depth_0);
 
   // filter the points cloud from type
   if (shape_type == "nought") {
     crop_filter_.setInputCloud(current_points);
-    crop_filter_.setMin(Eigen::Vector4f(-0.13, 0.05, 0.35, 1.0));
-    crop_filter_.setMax(Eigen::Vector4f(0.13, 0.4, 0.41, 1.0));
+    crop_filter_.setMin(Eigen::Vector4f(-0.13, 0.05, 0.46, 1.0));
+    crop_filter_.setMax(Eigen::Vector4f(0.13, 0.4, 0.51, 1.0));
     crop_filter_.filter(*pcl_crop_filtered_);
     *obj_points = *pcl_crop_filtered_;
     ROS_INFO("Get nought object, apply crop filter");
@@ -227,7 +296,7 @@ cw3::task1_getOrient(std::string shape_type)
   else if (shape_type == "cross") {
     pass_filter_.setInputCloud(current_points);
     pass_filter_.setFilterFieldName("z");
-    pass_filter_.setFilterLimits(0.35, 0.41);
+    pass_filter_.setFilterLimits(0.46, 0.51);
     pass_filter_.filter(*pcl_pass_filtered_);
     *obj_points = *pcl_pass_filtered_;
     ROS_INFO("Get cross object, apply pass filter");
@@ -237,29 +306,43 @@ cw3::task1_getOrient(std::string shape_type)
   } 
   
   // Compute the centroid of the point cloud
-  Eigen::Vector4f centroid;
-  pcl::compute3DCentroid(*obj_points, centroid);
+  //Eigen::Vector4f centroid;
+  //pcl::compute3DCentroid(*obj_points, centroid);
 
-  // apply PCA to get 
+  // apply PCA to get orientation
   pcl::PCA<pcl::PointXYZRGB> pca;
   pca.setInputCloud(obj_points);
 
   // Get the orientation of the first principal component
   Eigen::Vector3f eigenVectors = pca.getEigenVectors().col(0);
-  double dot = eigenVectors(1); // y-component
-  double det = eigenVectors(0); // x-component
+
+  // get y-component of eigen
+  double dot = eigenVectors(1); 
+  // get x-component of eigen
+  double det = eigenVectors(0); 
 
   // Compute angle between the major axis and the global x-axis
-  double obj_orient = atan2(dot, det); 
-
+  double obj_orient = atan2(dot, det) ; 
+  
+  ROS_INFO("==PCA== The object orient as (%f) degree", obj_orient* (180/pi_));
+  
   // Normalize the orientation to be within -PI/4 to PI/4
-  if (obj_orient > pi_ / 4) {
-      obj_orient -= pi_ / 2;
+  if (obj_orient > pi_/2) {
+      obj_orient += - pi_;
   } 
-  else if (obj_orient < -pi_ / 4) {
-      obj_orient += pi_ / 2;
+  else if (obj_orient < - pi_/2) {
+      obj_orient += pi_;
   }
 
+  if (obj_orient > pi_/4) {
+      obj_orient += - pi_/2;
+  } 
+  else if (obj_orient < - pi_/4) {
+      obj_orient += pi_/2;
+  }
+
+  ROS_INFO("=== The object orient as (%f) degree", obj_orient* (180/pi_));
+  
   // return the result
   return obj_orient;
 }
@@ -267,15 +350,27 @@ cw3::task1_getOrient(std::string shape_type)
 ////////////////////////////////////////////////////////////////////
 
 bool
-cw3::pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask)
+cw3::pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask, double rotate_angle)
 {
   // This function pick a cube from given position and drop it at another given position
 
   // set the desired grasping pose
   geometry_msgs::Pose grasp_pose = setPose(pointCube.x, pointCube.y, pointCube.z + gripper_offset_);
+  geometry_msgs::Pose place_pose = setPose(pointBask.x, pointBask.y, pointBask.z + gripper_offset_);
+
+  // define grasping as from above
+  tf2::Quaternion q_x180deg(-1, 0, 0, 0);
+  tf2::Quaternion q_object;
+  q_object.setRPY(0, 0, angle_offset_ + rotate_angle);
+  // determine the grasping orientation
+  tf2::Quaternion q_result = q_x180deg * q_object;
+  geometry_msgs::Quaternion grasp_orientation = tf2::toMsg(q_result);
+  // set the desired orient
+  grasp_pose.orientation = grasp_orientation;
 
   // set the desired pre-grasping pose
   geometry_msgs::Pose approach_pose = grasp_pose;
+  approach_pose = grasp_pose;
   approach_pose.position.z += approach_distance_;
 
   /* Now perform the pick */
@@ -321,7 +416,8 @@ cw3::pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask
   }
 
   // move over the basket
-  approach_pose.position.x = pointBask.x; // set up position that over the basket
+  approach_pose.position.x = pointBask.x; 
+  // set up position that over the basket
   approach_pose.position.y = pointBask.y;
 
   success *= moveArm(approach_pose);
@@ -331,9 +427,9 @@ cw3::pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask
   }
 
   // place the cube
-  approach_pose.position.z = pointBask.z + approach_distance_;
-  success *= moveArm(approach_pose);
-  ROS_INFO("### place pose %f, %f, %f\n", approach_pose.position.x, approach_pose.position.y, approach_pose.position.z);
+  place_pose.position.z = approach_pose.position.z;
+  success *= moveArm(place_pose);
+  ROS_INFO("### place pose %f, %f, %f\n", place_pose.position.x, place_pose.position.y, place_pose.position.z);
   success *= moveGripper(gripper_open_);
   if (not success)
   {
@@ -341,6 +437,10 @@ cw3::pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask
   }
 
   ROS_INFO("Placing successful");
+
+  // return back
+  place_pose = setPose(0.5, 0.0, 0.4);
+  success *= moveArm(place_pose);
 
   return true;
 }
@@ -396,10 +496,24 @@ cw3::task2_checkShape(geometry_msgs::Point point) {
 
   // judge shape
   std::string res;
-  if (green > red && green > blue)
+  if (red < 50 && green < 50 && blue < 50)
+  {
+    res = "obstacle";
+  } 
+  else if (red > 100 && red < 180 && green > 50 && green < 130 && blue < 60 && red > green)
+  {
+    res = "basket";
+    basket_point_ = point;
+  }
+  
+  else if (green > red && green > blue)
+  {
     res = "nought";
+  }
   else
+  {
     res = "cross";
+  }
   return res;
 }
 
@@ -499,7 +613,7 @@ cw3::scanEnvironment()
   bool reset_success = moveArm(reset_pose);
 
   // set speed of arm
-  arm_group_.setMaxVelocityScalingFactor(0.05);
+  arm_group_.setMaxVelocityScalingFactor(0.1); //0.05
 
   // Create corners of scan area
   geometry_msgs::Point corner1;
@@ -630,6 +744,6 @@ cw3::clustering(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_input)
           centroids_vector.push_back(simple_centroid);
         }
     }
-
+    
     return centroids_vector;
 }

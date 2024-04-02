@@ -36,6 +36,7 @@ solution is contained within the cw3_team_<your_team_number> package */
 #include <pcl/common/centroid.h>
 
 #include <mutex>
+#include <map>
 
 // include services from the spawner package - we will be responding to these
 #include "cw3_world_spawner/Task1Service.h"
@@ -78,7 +79,7 @@ public:
 
   bool 
   solve_task1(geometry_msgs::Point object_point, 
-    geometry_msgs::Point target_point, std::string shape_type);
+    geometry_msgs::Point target_point, std::string shape_type, double obj_width);
 
   int64_t
   solve_task2(std::vector<geometry_msgs::PointStamped> ref_points, 
@@ -94,7 +95,7 @@ public:
   moveGripper(float width);
 
   bool
-  pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask);
+  pickAndPlace(geometry_msgs::Point pointCube, geometry_msgs::Point pointBask, double angle_offset);
 
   geometry_msgs::Pose
   setPose(float x, float y, float z);
@@ -110,6 +111,9 @@ public:
 
   std::vector<pcl::PointXYZ> 
   clustering(pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_input);
+
+  geometry_msgs::Point 
+  findMostCommonPoint(const std::map<std::tuple<float, float, float>, std::string>& point_shape_map);
 
   /* ----- class member variables ----- */
 
@@ -140,17 +144,20 @@ public:
   pcl::CropBox<pcl::PointXYZRGB> crop_filter_;
   pcl::PassThrough<pcl::PointXYZRGB> pass_filter_;
 
+  geometry_msgs::Point basket_point_;
+
 
   moveit::planning_interface::MoveGroupInterface arm_group_{"panda_arm"};
   moveit::planning_interface::MoveGroupInterface hand_group_{"hand"};
 
   double obj_width_ = 0.04;
   double pi_ = 3.14159;
-
   double z_offset_ = 0.125;
   double angle_offset_ = 3.14159 / 4.0;
+
   double camera_offset_ = 0.04;
   double check_height_ = 0.5;
+
   double gripper_open_ = 80e-3;
   double gripper_closed_ = 0.03;
   double gripper_offset_ = 0.145;
